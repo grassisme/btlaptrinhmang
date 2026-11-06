@@ -1,0 +1,140 @@
+file UDP:
+package UDP;
+
+import java.io.Serializable;
+
+public class Customer implements Serializable {
+    private static final long serialVersionUID = 20151107;
+
+    public String id;
+    public String code;
+    public String name;
+    public String dayOfBirth;
+    public String userName;
+
+    public Customer(String id, String code, String name,
+                    String dayOfBirth, String userName) {
+        this.id = id;
+        this.code = code;
+        this.name = name;
+        this.dayOfBirth = dayOfBirth;
+        this.userName = userName;
+    }
+
+    @Override
+    public String toString() {
+        return id + " | " + code + " | " + name + " | "
+             + dayOfBirth + " | " + userName;
+    }
+}
+
+file code chạy:
+import java.io.*;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import UDP.Customer;
+
+public class laptrinhmang {
+    public static void main(String[] args) throws Exception {
+        String host = "36.50.135.242";
+        int port = 2209;
+        String studentCode = "B23DCVT107";
+        String qCode = "OGCkdN1z";
+
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.setSoTimeout(15000);
+
+            InetAddress addr = InetAddress.getByName(host);
+            byte[] sendData = (";" + studentCode + ";" + qCode)
+                                .getBytes(StandardCharsets.UTF_8);
+            byte[] buf = new byte[65507];
+
+            DatagramPacket recv = null;
+            for (int attempt = 1; attempt <= 3 && recv == null; attempt++) {
+                socket.send(new DatagramPacket(sendData, sendData.length, addr, port));
+                System.out.println("Sent attempt " + attempt);
+                try {
+                    DatagramPacket p = new DatagramPacket(buf, buf.length);
+                    socket.receive(p);
+                    recv = p;
+                } catch (SocketTimeoutException e) {
+                    System.out.println("Timeout, thu lai...");
+                }
+            }
+            if (recv == null) { System.out.println("Server khong phan hoi."); return; }
+
+            // 8 byte dau = requestId, phan con lai = object
+            byte[] raw = recv.getData();
+            int len = recv.getLength();
+            byte[] idBytes = new byte[8];
+            System.arraycopy(raw, 0, idBytes, 0, 8);
+            String requestId = new String(idBytes, StandardCharsets.UTF_8);
+
+            Customer c;
+            try (ObjectInputStream ois = new ObjectInputStream(
+                     new ByteArrayInputStream(raw, 8, len - 8))) {
+                c = (Customer) ois.readObject();
+            }
+            System.out.println("requestId = " + requestId);
+            System.out.println("Received: " + c);
+
+            // bien doi
+            c.userName   = toUserName(c.name);
+            c.dayOfBirth = toDdMmYyyy(c.dayOfBirth);
+            c.name       = toDisplayName(c.name);
+            System.out.println("Modified: " + c);
+
+            // dong goi: 8 byte requestId + object
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            bos.write(idBytes);
+            try (ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+                oos.writeObject(c);
+            }
+            byte[] ans = bos.toByteArray();
+            socket.send(new DatagramPacket(ans, ans.length, addr, port));
+            System.out.println("Sent object back.");
+
+            try {
+                DatagramPacket reply = new DatagramPacket(buf, buf.length);
+                socket.receive(reply);
+                System.out.println("Reply: " + new String(reply.getData(), 0,
+                        reply.getLength(), StandardCharsets.UTF_8).trim());
+            } catch (SocketTimeoutException e) {
+                System.out.println("Khong co phan hoi cuoi.");
+            }
+        }
+    }
+
+    // "nguyen van hai duong" -> "DUONG, Nguyen Van Hai"
+    static String toDisplayName(String name) {
+        String[] w = name.trim().split("\\s+");
+        StringBuilder sb = new StringBuilder();
+        sb.append(w[w.length - 1].toUpperCase(Locale.ROOT)).append(",");
+        for (int i = 0; i < w.length - 1; i++) {
+            sb.append(" ").append(capitalize(w[i]));
+        }
+        return sb.toString();
+    }
+
+    // "nguyen van hai duong" -> "nvhduong"
+    static String toUserName(String name) {
+        String[] w = name.trim().toLowerCase(Locale.ROOT).split("\\s+");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < w.length - 1; i++) sb.append(w[i].charAt(0));
+        sb.append(w[w.length - 1]);
+        return sb.toString();
+    }
+
+    // "mm-dd-yyyy" -> "dd/mm/yyyy"
+    static String toDdMmYyyy(String d) {
+        String[] p = d.trim().split("-");
+        return p[1] + "/" + p[0] + "/" + p[2];
+    }
+
+    static String capitalize(String s) {
+        if (s.isEmpty()) return s;
+        return Character.toUpperCase(s.charAt(0))
+             + s.substring(1).toLowerCase(Locale.ROOT);
+    }
+}
