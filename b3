@@ -1,0 +1,61 @@
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+public class laptrinhmang {
+    public static void main(String[] args) throws Exception {
+        String host = "36.50.135.242";
+        int port = 2207;
+        String studentCode = "B23DCVT107";
+        String qCode = "LLoLtnGa";
+
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.setSoTimeout(15000);
+
+            InetAddress addr = InetAddress.getByName(host);
+            byte[] sendData = (";" + studentCode + ";" + qCode)
+                                .getBytes(StandardCharsets.UTF_8);
+            byte[] buf = new byte[8192];
+
+            String data = null;
+            for (int attempt = 1; attempt <= 3 && data == null; attempt++) {
+                socket.send(new DatagramPacket(sendData, sendData.length, addr, port));
+                System.out.println("Sent attempt " + attempt);
+                try {
+                    DatagramPacket recv = new DatagramPacket(buf, buf.length);
+                    socket.receive(recv);
+                    data = new String(recv.getData(), 0, recv.getLength(),
+                                      StandardCharsets.UTF_8).trim();
+                } catch (SocketTimeoutException e) {
+                    System.out.println("Timeout, thu lai...");
+                }
+            }
+            if (data == null) { System.out.println("Server khong phan hoi."); return; }
+            System.out.println("Received: " + data);
+
+            String[] parts = data.split(";", 2);
+            String requestId = parts[0].trim();
+
+            int max = Integer.MIN_VALUE, min = Integer.MAX_VALUE;
+            for (String s : parts[1].split(",")) {
+                int v = Integer.parseInt(s.trim());
+                if (v > max) max = v;
+                if (v < min) min = v;
+            }
+
+            byte[] ansData = (requestId + ";" + max + "," + min)
+                                .getBytes(StandardCharsets.UTF_8);
+            socket.send(new DatagramPacket(ansData, ansData.length, addr, port));
+            System.out.println("Sent: " + requestId + ";" + max + "," + min);
+
+            try {
+                DatagramPacket reply = new DatagramPacket(buf, buf.length);
+                socket.receive(reply);
+                System.out.println("Reply: " + new String(reply.getData(), 0,
+                        reply.getLength(), StandardCharsets.UTF_8).trim());
+            } catch (SocketTimeoutException e) {
+                System.out.println("Khong co phan hoi cuoi.");
+            }
+        }
+    }
+}
