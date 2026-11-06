@@ -1,0 +1,68 @@
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+
+public class laptrinhmang {
+    public static void main(String[] args) throws Exception {
+        String host = "36.50.135.242";
+        int port = 2208;
+        String studentCode = "B23DCVT107";
+        String qCode = "uGafHupQ";
+
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.setSoTimeout(15000);
+
+            InetAddress addr = InetAddress.getByName(host);
+            byte[] sendData = (";" + studentCode + ";" + qCode)
+                                .getBytes(StandardCharsets.UTF_8);
+            byte[] buf = new byte[8192];
+
+            String msg = null;
+            for (int attempt = 1; attempt <= 3 && msg == null; attempt++) {
+                socket.send(new DatagramPacket(sendData, sendData.length, addr, port));
+                System.out.println("Sent attempt " + attempt);
+                try {
+                    DatagramPacket recv = new DatagramPacket(buf, buf.length);
+                    socket.receive(recv);
+                    msg = new String(recv.getData(), 0, recv.getLength(),
+                                     StandardCharsets.UTF_8).trim();
+                } catch (SocketTimeoutException e) {
+                    System.out.println("Timeout, thu lai...");
+                }
+            }
+            if (msg == null) { System.out.println("Server khong phan hoi."); return; }
+            System.out.println("Received: " + msg);
+
+            String[] parts = msg.split(";", 2);
+            String requestId = parts[0].trim();
+            String data = parts[1];
+
+            StringBuilder sb = new StringBuilder();
+            boolean newWord = true;
+            for (char c : data.toCharArray()) {
+                if (Character.isWhitespace(c)) {
+                    newWord = true;
+                    sb.append(c);
+                } else {
+                    sb.append(newWord ? Character.toUpperCase(c)
+                                      : Character.toLowerCase(c));
+                    newWord = false;
+                }
+            }
+            String normalized = sb.toString();
+
+            byte[] ansData = (requestId + ";" + normalized)
+                                .getBytes(StandardCharsets.UTF_8);
+            socket.send(new DatagramPacket(ansData, ansData.length, addr, port));
+            System.out.println("Sent: " + requestId + ";" + normalized);
+
+            try {
+                DatagramPacket reply = new DatagramPacket(buf, buf.length);
+                socket.receive(reply);
+                System.out.println("Reply: " + new String(reply.getData(), 0,
+                        reply.getLength(), StandardCharsets.UTF_8).trim());
+            } catch (SocketTimeoutException e) {
+                System.out.println("Khong co phan hoi cuoi.");
+            }
+        }
+    }
+}
