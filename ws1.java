@@ -22,6 +22,7 @@ public class Main {
         String studentCode = "B23DCVT107";
         String qCode = "9T90WySt";
         DataService port = new DataService_Service().getDataServicePort();
+        SoapDataSevice sv = sv.getSoapDataServicePort();
         List<Integer> data = port.getData(studentCode, qCode);
         System.out.println("Received: " + data);
         List<String> s = new ArrayList<>();
